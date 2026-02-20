@@ -7,6 +7,8 @@ it contain:
 1. App with ai music separation
 2. instructions and tools for anybody that wants to separate other kind of music
 
+*if you have a laptop look at the bottom
+
 Project Structure (important)
 
 Make sure your project looks like this after cloning:
@@ -25,8 +27,6 @@ project-root/
 The app automatically detects the model path — no manual configuration required.
 
 Requirements:
-
-Python 3.9 – 3.11 recommended
 
 Git
 
@@ -49,6 +49,7 @@ Setup Instructions
 1️. Clone the repository
 git clone https://github.com/your-username/your-repo-name.git
 cd your-repo-name
+
 2. Create a virtual environment (recommended)
 python -m venv .venv
 
@@ -64,7 +65,10 @@ source .venv/bin/activate
 3️. Install dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
-4. Running the App
+
+4. unzip piano.zip to piano.chkpnt
+   
+5. Run the App
 
 From the project root directory, run:
 
@@ -80,6 +84,9 @@ Enable/disable stems
 Adjust volume
 
 Listen to multiple stems at once
+
+* if you have a python you may have to download a few files and place them in: 
+C:\Users\yourUserName\.cache\torch\hub\checkpoints
 
 Notes:
 
