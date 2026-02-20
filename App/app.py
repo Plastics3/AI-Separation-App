@@ -276,12 +276,8 @@ def start_playback(path):
     global separator, threads_started
     try:
         status_var.set("Loading model…")
-        root.update_idletasks()
-        # lazy-load (or reload) model
-        print("DEBUG: Loading Torch Model...")
         # lazy-load (or reload) model
         if separator is None:
-            print("DEBUG: Loading model with progress bars DISABLED...")
             separator = torch.hub.load(
                 'sigsep/open-unmix-pytorch', 
                 'umxhq', 
@@ -289,8 +285,6 @@ def start_playback(path):
                 trust_repo=True,
                 skip_validation=True
             ).eval().to(DEVICE)
-            print("DEBUG: Model Loaded Successfully!")
-        print("DEBUG: Model loaded.")
         # reset state
         while not blocks_q.empty():
             try: blocks_q.get_nowait()
@@ -298,7 +292,6 @@ def start_playback(path):
         stop_flag.clear()
         status_var.set("Preparing…")
         global PIANO_SEPARATOR
-        print("DEBUG: Loading Piano Separator ONNX Model...")
 
         if PIANO_SEPARATOR is None:
             PIANO_SEPARATOR = utils.load_separator(
@@ -311,13 +304,11 @@ def start_playback(path):
             )
             PIANO_SEPARATOR.freeze()
             PIANO_SEPARATOR.to(DEVICE)
-        print("DEBUG: Piano Separator loaded.")
         # start threads
         t1 = threading.Thread(target=reader_worker, args=(path,), daemon=True)
         t2 = threading.Thread(target=player_worker, daemon=True)
         t1.start(); t2.start()
         threads_started = True
-        print("DEBUG: Threads started.")
     except Exception as e:
         status_var.set("Error")
         messagebox.showerror("Model error", str(e))
