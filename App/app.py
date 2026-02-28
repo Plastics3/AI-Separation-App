@@ -44,7 +44,7 @@ STEM_GAIN = {
     "vocals": 0.9, # reduce vocals by default
     "drums": 1.0,
     "bass": 1.2,   # boost bass by default
-    "piano": 1.2,  # boost piano by default
+    "piano": 20.0,  # boost piano by default
     "other": 1.0,
 }
 # Optional: choose output device, e.g., Mac speakers were index 1
@@ -238,7 +238,6 @@ def player_worker():
             outdata[:] = 0.0
 
     try:
-        print("DEBUG: Opening Speakers...")
         with sd.OutputStream(
             samplerate=SR_MODEL,
             channels=OUTPUT_CHS,
@@ -410,8 +409,7 @@ for name, label in [("vocals","Vocals"), ("drums","Drums"),
 for name in ACTIVE_STEMS.keys():
     tk.Label(mid, text=name.capitalize()).pack(anchor="w")
     s = tk.Scale(mid, from_=0.0, to=2.0, resolution=0.01,
-                 orient="horizontal",
-                 command=lambda val, n=name: STEM_GAIN.update({n: float(val)}))
+                 orient="horizontal")
     s.set(1.0)
     s.pack(anchor="w", fill="x")
 
