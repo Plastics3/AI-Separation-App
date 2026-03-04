@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from openunmix import utils
 import soundfile as sf
+from pydub import AudioSegment
 
 
 import onnxruntime as ort    # pip install onnxruntime
@@ -22,8 +23,8 @@ if not os.path.exists(MODEL_DIR):
 
 # ========= SETTINGS =========
 SR_MODEL       = 44100
-SEGMENT_SEC    = 7.50 #default 6.0
-OVERLAP        = 0.50 #default 0.80
+SEGMENT_SEC    = 6.50 #default 6.0
+OVERLAP        = 0.60 #default 0.80
 HOP_SEC        = SEGMENT_SEC * (1.0 - OVERLAP)
 OUTPUT_CHS     = 1
 BLOCKSIZE      = 4096
@@ -353,6 +354,10 @@ def on_save():
     piano = estimates["Piano"][0].cpu().numpy().T
     sf.write(out_path, piano, samplerate=44100)
     print(f"Saved: {out_path}")
+    song = AudioSegment.from_wav(out_path)
+    song = song + 20
+    song.export(out_path,"wav")
+    
 
 btns = {}
 

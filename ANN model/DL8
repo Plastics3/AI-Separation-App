@@ -1,0 +1,430 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import random
+import math
+import os
+import h5py
+from sklearn.metrics import classification_report, confusion_matrix
+
+class DLLayer:
+    def _init_(self, name, num_units, input_shape: tuple,activation = "relu", W_initialization = "random", learning_rate = 1.2, optimization = "None", random_scale = 0.01, regularization = None):
+        self.name = name
+        self.num_units = num_units
+        self.input_shape = input_shape
+        self.activation = activation
+        self.W_initialization = W_initialization
+        self.learning_rate = learning_rate
+        self.alpha = learning_rate
+        self.optimization = optimization
+        self.leaky_relu_d = 0.01
+        self.random_scale = random_scale
+        self.regularization = regularization
+        self.activation_trim = 1e-10
+        self._adaptive_alpha_b = np.full((self.num_units, 1), self.alpha)
+        self._adaptive_alpha_W = np.full((self.num_units, *self.input_shape), self.alpha)
+        
+        if optimization == "adaptive":
+            self.adaptive_cont = 1.1
+            self.adaptive_switch = 0.5
+        elif optimization == "momentum":
+            self.momentum_beta = 0.9
+            self._momentum_v_W = np.zeros((self.num_units, *self.input_shape))
+            self._momentum_v_b = np.zeros((self.num_units, 1))
+        elif optimization == "adam":
+            self.adam_beta1 = 0.9
+            self.adam_beta2 = 0.999
+            self.adam_epsilon = 1e-8
+            self._adam_v_W = np.zeros((self.num_units, *self.input_shape))
+            self._adam_v_b = np.zeros((self.num_units, 1))
+            self._adam_s_W = np.zeros((self.num_units, *self.input_shape))
+            self._adam_s_b = np.zeros((self.num_units, 1))
+            self._adam_t = 0
+            
+        if regularization == "L2":
+            self.L2_lambda = 0.1
+        elif regularization == "dropout":
+            self.dropout_keep_prob = 0.6
+        else:
+            print("regularization is not constructed")
+
+        self.init_weights(W_initialization)
+        
+
+    def init_weights(self, W_initialization):
+        self.b = np.zeros((self.num_units, 1))
+        W_initialization = W_initialization.lower()
+        if W_initialization == "random":
+            self.W = np.random.randn(self.num_units, *self.input_shape) * self.random_scale
+        elif W_initialization == "zeros":
+            self.W = np.zeros((self.num_units, *self.input_shape))
+        elif W_initialization == "he":
+            self.W = np.random.randn(*(self.num_units, *(self.input_shape))) * np.sqrt(2.0/sum(self.input_shape))
+        elif W_initialization == "xaviar":
+            self.W = np.random.randn(*(self.num_units, sum(self.input_shape))) * np.sqrt(1.0/sum(self.input_shape))
+        else:
+            try:
+                with h5py.File(W_initialization, 'r') as hf:
+                    self.W = hf['W'][:]
+                    self.b = hf['b'][:]
+            except FileNotFoundError:
+                raise ValueError(f"Unknown initialization method or file not found: {W_initialization}")
+
+    def _str_(self):
+        s = self.name + " Layer:\n"
+        s += "\tnum_units: " + str(self.num_units) + "\n"
+        s += "\tactivation: " + self.activation + "\n"
+        if self.activation == "leaky_relu":
+            s += "\t\tleaky relu parameters:\n"
+            s += "\t\t\tleaky_relu_d: " + str(self.leaky_relu_d)+"\n"
+        s += "\tinput_shape: " + str(self.input_shape) + "\n"
+        s += "\tlearning_rate (alpha): " + str(self.alpha) + "\n"
+        #optimization
+        if self.optimization == "adaptive":
+            s += "\t\tadaptive parameters:\n"
+            s += "\t\t\tcont: " + str(self.adaptive_cont)+"\n"
+            s += "\t\t\tswitch: " + str(self.adaptive_switch)+"\n"
+        # parameters
+        if self.regularization != None:
+            s += "\tregularization: " + str(self.regularization)+"\n"
+            s += f"\t\t{self.regularization} parameters: \n"
+            if self.regularization == "L2":
+                s += "\t\t\tlambda: " + str(self.L2_lambda)+"\n"
+            elif self.regularization == "dropout":
+                s += "\t\t\tkeep prob: " + str(self.dropout_keep_prob)+"\n"
+            else: s+= "no regularization, error in str maybe\n"
+        s += "\tparameters:\n\t\tb.T: " + str(self.b.T) + "\n"
+        s += "\t\tshape weights: " + str(self.W.shape)+"\n"
+        plt.hist(self.W.reshape(-1))
+        plt.title("W histogram")
+        plt.show()
+        return s;
+
+    def activation_forward(self, Z):
+        if self.activation == "sigmoid":
+            return self.sigmoid(Z)
+        if self.activation == "tanh":
+            return self._tanh(Z)
+        if self.activation == "relu":
+            return self._relu(Z)
+        if self.activation == "leaky_relu":
+            return self._leaky_relu(Z)
+        if self.activation == "trim_sigmoid":
+            return self._trim_sigmoid(Z)
+        if self.activation == "trim_tanh":
+            return self._trim_tanh(Z)
+        if self.activation == "softmax":
+            return self.softmax(Z)
+        if self.activation == "_trim_softmax":
+            return self._trim_softmax(Z)
+
+
+    def activation_backward(self, dA):
+        if self.activation == "sigmoid":
+            return self._sigmoid_backward(dA)
+        if self.activation == "tanh":
+            return self._tanh_backward(dA)
+        if self.activation == "relu":
+            return self._relu_backward(dA)
+        if self.activation == "leaky_relu":
+            return self._leaky_relu_backward(dA)
+        if self.activation == "softmax":
+            return self.softmax_backward(dA)
+
+    def softmax(self,Z):
+        ePowZ = pow(math.e,Z)
+        return ePowZ / (sum(ePowZ))
+
+    def softmax_backward(self,dA):
+        return dA
+
+    def _trim_softmax(self, Z):
+        with np.errstate(over='raise', divide='raise'):
+            try:
+                eZ = np.exp(Z)
+            except FloatingPointError:
+                Z = np.where(Z > 100, 100,Z)
+                eZ = np.exp(Z)
+        A = eZ/np.sum(eZ, axis=0)
+        return A
+
+    def sigmoid(self, Z):
+        return 1/(1+pow(math.e,-Z))
+
+    def _sigmoid_backward(self,dA):
+        A = self.sigmoid(self._Z)
+        dZ = dA * A * (1-A)
+        return dZ
+
+    def _tanh(self, Z):
+        return np.tanh(Z)
+
+    def _tanh_backward(self, dA):
+        A = np.tanh(self._Z)
+        return dA * (1 - A ** 2)
+
+    def _relu(self, Z):
+        return np.maximum(0,Z)
+
+    def _relu_backward(self,dA):
+        dZ = np.where(self._Z <= 0, 0, dA)
+        return dZ
+
+    def _leaky_relu(self, Z):
+        return np.where(Z > 0, Z, self.leaky_relu_d * Z)
+
+    def _leaky_relu_backward(self,dA):
+        dZ = np.where(self._Z > 0, dA, self.leaky_relu_d * dA)
+        return dZ
+
+    def _trim_sigmoid(self,Z):
+        with np.errstate(over='raise',divide='raise'):
+            try:
+                A = 1/(1+np.exp(-Z))
+            except FloatingPointError:
+                Z = np.where(Z < -100, -100,Z)
+                A = A = 1/(1+np.exp(-Z))
+        TRIM = self.activation_trim
+        if TRIM > 0:
+             A = np.where(A < TRIM,TRIM,A)
+             A = np.where(A > 1-TRIM,1-TRIM, A)
+        return A
+
+    def _trim_tanh(self,Z):
+        A = np.tanh(Z)
+        TRIM = self.activation_trim
+        if TRIM > 0:
+            A = np.where(A < -1+TRIM,TRIM,A)
+            A = np.where(A > 1-TRIM,1-TRIM, A)
+        return A
+
+    def forward_propagation(self,A_prev, is_predict):
+        if is_predict == False and self.regularization == "dropout":
+            self._D = np.random.rand(*A_prev.shape)
+            print(self._D)
+            self._D = np.where(self._D < self.dropout_keep_prob, 1, 0)
+            print(self._D)
+            A_prev *= self._D
+            devider = 1/self.dropout_keep_prob
+            A_prev = np.dot(A_prev,devider)
+        self._A_prev = np.array(A_prev, copy=True)
+        self._Z = np.dot(self.W, self._A_prev) + self.b
+        return self.activation_forward(self._Z)
+
+    def backward_propagation(self,dA):
+        m = self._A_prev.shape[1]
+        dZ = self.activation_backward(dA)
+        self.dA_Prev = np.dot((self.W).T, dZ)
+        self.dW = np.dot(dZ ,self._A_prev.T) / m
+        self.db = np.sum(dZ, axis=1, keepdims=True) / m
+        if self.regularization == "dropout": 
+            self.dA_Prev = (self.dA_Prev * self._D) / self.dropout_keep_prob
+        elif self.regularization == "L2": 
+            self.dW += (self.L2_lambda / m) * self.W
+        return self.dA_Prev
+
+    def update_parameters(self, t=1):
+        if self.optimization == "adaptive":
+            # Compute element-wise sign match for W and b
+            sign_match_W = np.sign(self.dW) == np.sign(self._adaptive_alpha_W)
+            sign_match_b = np.sign(self.db) == np.sign(self._adaptive_alpha_b)
+
+            # Update learning rates adaptively
+            self._adaptive_alpha_W *= np.where(sign_match_W, self.adaptive_cont, -self.adaptive_switch)
+            self._adaptive_alpha_b *= np.where(sign_match_b, self.adaptive_cont, -self.adaptive_switch)
+
+            # Apply parameter updates using only adaptive learning rates
+            self.W -= self._adaptive_alpha_W
+            self.b -= self._adaptive_alpha_b
+
+        elif self.optimization == "adam":
+            self._adam_t += 1
+            # Update biased first moment estimate
+            self._adam_v_W = self.adam_beta1 * self._adam_v_W + (1 - self.adam_beta1) * self.dW
+            self._adam_v_b = self.adam_beta1 * self._adam_v_b + (1 - self.adam_beta1) * self.db
+            # Update biased second moment estimate
+            self._adam_s_W = self.adam_beta2 * self._adam_s_W + (1 - self.adam_beta2) * (self.dW ** 2)
+            self._adam_s_b = self.adam_beta2 * self._adam_s_b + (1 - self.adam_beta2) * (self.db ** 2)
+            # Compute bias-corrected first moment estimate
+            v_corrected_W = self._adam_v_W / (1 - self.adam_beta1 ** self._adam_t)
+            v_corrected_b = self._adam_v_b / (1 - self.adam_beta1 ** self._adam_t)
+            # Compute bias-corrected second moment estimate
+            s_corrected_W = self._adam_s_W / (1 - self.adam_beta2 ** self._adam_t)
+            s_corrected_b = self._adam_s_b / (1 - self.adam_beta2 ** self._adam_t)
+            # Update parameters
+            self.W -= self.learning_rate * (v_corrected_W / (np.sqrt(s_corrected_W + self.adam_epsilon))) #epsilon could be outside of sqrt
+            self.b -= self.learning_rate * (v_corrected_b / (np.sqrt(s_corrected_b + self.adam_epsilon)))
+
+        else:
+            # Standard gradient descent update (if optimization is None)
+            self.W -= self.alpha * self.dW
+            self.b -= self.alpha * self.db
+
+    def save_weights(self, path, file_name):
+        with h5py.File(path+"/"+file_name+'.h5', 'w') as hf:
+            hf.create_dataset("W", data=self.W)
+            hf.create_dataset("b", data=self.b)
+
+    def update_velocity(self, v, grads, beta, L):
+        for i in range(1, L):
+            v[f"dW {str(i)}"] = beta * v["dW " + str(i)] + (1 - beta) * grads["dW " + str(i)]
+            v[f"db {str(i)}"] = beta * v["db " + str(i)] + (1 - beta) * grads["db " + str(i)]
+
+            self.W -= self.learning_rate * v[f"dW {str(i)}"]
+            self.b -= self.learning_rate * v[f"db {str(i)}"]
+        return v
+
+
+class DLModel:
+    def _init_(self, name = "Model"):
+        self.name = name
+        self.layers = [None] #If something doesnt work self.layers = []
+        self.is_compiled = False
+        self.inject_str_func = None
+
+    def add(self, layer):
+        self.layers.append(layer)
+
+    def squared_means(self,AL,Y):
+        return pow(AL - Y,2)
+
+    def squared_means_backward(self,AL,Y):
+        return 2 * (AL - Y)
+
+    def cross_entropy(self,AL,Y):
+        error = np.where(Y == 0, -np.log(1 - AL), -np.log(AL))
+        return error
+
+    def cross_entropy_backward(self,AL,Y):
+        return np.where(Y == 0, 1/(1-AL), -1/AL)
+
+    def _categorical_cross_entropy(self, AL, Y):
+        errors = np.where(Y == 1, -np.log(AL + 1e-10), 0)
+        return errors
+
+    def _categorical_cross_entropy_backward(self, AL, Y):
+        return AL - Y
+
+    def compile(self,loss,threshold = 0.5):
+        self.is_compiled = True
+        self.threshold = threshold
+        self.loss = loss
+        if loss == "squared_means":
+            self.loss_forward = self.squared_means
+            self.loss_backward = self.squared_means_backward
+        elif loss == "categorical_cross_entropy":
+            self.loss_forward = self._categorical_cross_entropy
+            self.loss_backward = self._categorical_cross_entropy_backward
+        else:
+            self.loss_forward = self.cross_entropy
+            self.loss_backward = self.cross_entropy_backward
+
+    def compute_cost(self,AL,Y):
+        m = AL.shape[1]
+        loss = self.loss_forward(AL,Y)
+        J = np.sum(loss) / m
+        
+        L2Regularization = 0
+        for i in range(1, len(self.layers)):
+            if self.layers[i].regularization == "L2":
+                L2Regularization += (m/2) * np.sum(np.square(self.layers[i].W)) * self.layers[i].L2_lambda
+                
+        return J + L2Regularization
+
+    def train(self, X, Y, num_epocs, mini_batch_size = 64):
+         self.iTrainable.set_train(True)
+         print_ind = max( num_epocs// 100, 1)
+         costs = []
+         for i in range(num_epocs):
+             mini_batches = self.random_mini_batches(X, Y, mini_batch_size, seed = i)
+             
+             for mini_batch_X, mini_batch_Y in mini_batches:
+                 Y_hat = self.forward_propagation(mini_batch_X)
+                 self.backward_propagation(Y_hat, mini_batch_Y)
+                 self.update_parameters()
+
+            #record progress
+             if i > 0 and i % print_ind == 0:
+                Y_hatFull = self.forward_propagation(X)
+                J = self.compute_cost(Y_hatFull, Y)
+                costs.append(J)
+                #user defined info
+                inject_string = ""
+                if self.inject_str_func != None:
+                    inject_string = self.inject_str_func(self, X, Y, Y_hat)
+                print(f"cost after {i} updates {100*i/num_epocs}%:{J}" + inject_string)
+
+         costs.append(self.compute_cost(self.forward_propagation(X), Y))
+         self.iTrainable.set_train(False)
+         return costs
+
+    def predict(self,X):
+        AL = X
+        for i in range(1,len(self.layers)):
+            AL = self.layers[i].forward_propagation(AL, is_predict = True)
+        result = np.where(AL > self.threshold, True, False)
+        if AL.shape[0] > 1:
+            return np.where(AL == AL.max(axis=0),1,0)
+        return result
+
+    def _str_(self):
+        s = self.name + " description:\n\tnum_layers: " + str(len(self.layers)-1) +"\n"
+        if self.is_compiled:
+            s += "\tCompilation parameters:\n"
+            s += "\t\tprediction threshold: " + str(self.threshold) +"\n"
+            s += "\t\tloss function: " + self.loss + "\n\n"
+        for i in range(1,len(self.layers)):
+            s += "\tLayer " + str(i) + ":" + str(self.layers[i]) + "\n"
+        return s
+
+    def save_weights(self,path):
+        for i in range(1,len(self.layers)):
+            self.layers[i].save_weights(path,"Layer"+str(i))
+
+    @staticmethod
+    def to_one_hot(num_categories, Y):
+        m = Y.shape[0]
+        Y = Y.reshape(1, m)
+        Y_new = np.eye(num_categories)[Y.astype('int32')]
+        Y_new = Y_new.T.reshape(num_categories, m)
+        return Y_new
+
+    def confusion_matrix(self, X, Y):
+        prediction = self.predict(X)
+        prediction_index = np.argmax(prediction, axis=0)
+        Y_index = np.argmax(Y, axis=0)
+        right = np.sum(prediction_index == Y_index)
+        print("accuracy: ",str(right/len(Y[0])))
+        print(confusion_matrix(prediction_index, Y_index))
+
+    def random_mini_batches(X, Y, mini_batch_size = 64, seed = 0):
+        np.random.seed(seed)
+        m = X.shape[1]
+        mini_batches = []
+        permutation = list(np.random.permutation(m))
+        print(permutation)
+        shuffled_X = X[:, permutation]
+        shuffled_Y = Y[:, permutation].reshape((-1,m))
+        num_complete_minibatches = math.floor(m / mini_batch_size)
+
+        for k in range(0, num_complete_minibatches):
+            mini_batch_X = shuffled_X[:, k * mini_batch_size : (k + 1) * mini_batch_size]
+            mini_batch_Y = shuffled_Y[:, k * mini_batch_size : (k + 1) * mini_batch_size]
+            mini_batch = (mini_batch_X, mini_batch_Y)
+            mini_batches.append(mini_batch)
+            
+        if m % mini_batch_size != 0:
+            mini_batch_X = shuffled_X[:, num_complete_minibatches * mini_batch_size : m]
+            mini_batch_Y = shuffled_X[:, num_complete_minibatches * mini_batch_size : m]
+            mini_batch = (mini_batch_X, mini_batch_Y)
+            mini_batches.append(mini_batch)
+
+        return mini_batches
+
+    def initialize_velocity(self, parameters):
+        v = {}
+        for i in range(1, len(self.layers)):
+            v[f"dW {str(i)}"] = np.zeros(self.layers[i].W.shape)
+            v[f"db {str(i)}"] = np.zeros(self.layers[i].b.shape)
+        return v
+
+    

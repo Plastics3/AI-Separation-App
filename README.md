@@ -19,12 +19,11 @@ project-root/
 │  ├─ app.py
 │  └─ PianoSeparationModelWeights/
 │
-├─ open-unmix-pytorch/
 ├─ requirements.txt
 └─ README.md
 
 * The folder PianoSeparationModelWeights must be inside the app folder.
-The app automatically detects the model path — no manual configuration required.
+* The ANN folder is unrelated however is the model I built for other things.
 
 Requirements:
 
@@ -47,7 +46,7 @@ Linux:
 sudo apt install ffmpeg
 Setup Instructions
 1️. Clone the repository
-git clone https://github.com/your-username/your-repo-name.git
+command: git clone https://github.com/Plastics3/AI-Separation-App
 cd your-repo-name
 
 2. Create a virtual environment (recommended)
@@ -66,9 +65,8 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
-4. unzip piano.zip to piano.chkpnt
    
-5. Run the App
+4. Run the App
 
 From the project root directory, run:
 
@@ -77,15 +75,20 @@ python app/app.py
 The GUI should open.
 You can now:
 
-Load an audio file
+Load an audio file:
+Any song/audio that is downloaded
 
-Enable/disable stems
+Enable/disable stems:
+You can activate/deactivate the stems by clicking the buttons.
+You can see what stems are active in the top left.
+*it takes time for the effects to take place
 
-Adjust volume
+Adjust volume:
+Bottom right is the app volume button.
+each stem has a volume button however it takes time for it to take effect.
 
-Listen to multiple stems at once
 
-* if you have a python you may have to download a few files and place them in: 
+* If you have a laptop you may have to download a few files and place them in: 
 C:\Users\yourUserName\.cache\torch\hub\checkpoints
 
 Notes:
