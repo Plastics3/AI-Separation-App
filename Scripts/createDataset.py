@@ -4,6 +4,8 @@ from pydub import AudioSegment
 import shutil
 import random
 
+NumberOfSongs = None
+
 def make_folders(base_path):
     """
     Create 100 folders inside a base directory.
@@ -11,7 +13,7 @@ def make_folders(base_path):
     base_path (str): The base directory where folders will be created.
     """
     try:
-        for i in range(1, 366):
+        for i in range(1, NumberOfSongs + 1):
             path = os.path.join(base_path, f"{i}")
             os.makedirs(path, exist_ok=True)
             print(f"Created folder: {path}")
@@ -32,7 +34,7 @@ def PutInputFilesToFoldersAndRename(input_dir, Piano_Dir, Non_Piano_Dir):
             print(f"Copied {SoundPath} to {dst_sound}")
             
             i += 1
-            if i > 365:
+            if i > NumberOfSongs:
                 print(f"An error occurred in PutInputFilesToFoldersAndRename: Exceeded folder limit. in Piano files")
                 break
 
@@ -46,7 +48,7 @@ def PutInputFilesToFoldersAndRename(input_dir, Piano_Dir, Non_Piano_Dir):
             print(f"Copied {SoundPath} to {dst_sound}")
             
             i += 1
-            if i > 365:
+            if i > NumberOfSongs:
                 print(f"An error occurred in PutInputFilesToFoldersAndRename: Exceeded folder limit. in Non Piano files")
                 break
 
@@ -59,7 +61,7 @@ def mixAudioFilesAndTrimPianoAndDeleteSong(input_dir):
     """
     # load two audio files
     try:
-        for i in range(1,366):
+        for i in range(1, NumberOfSongs + 1):
             folder_path = os.path.join(input_dir, f"{i}")
             piano_path = os.path.join(folder_path, "Piano.wav")
             NonPiano_path = os.path.join(input_dir, f"{i}", f"{i}.wav")
@@ -137,8 +139,9 @@ def rename_folders_to_numbers(parent_dir):
 
 def Main():
     INPUT_DIR = r"input here"  # change to your input directory
-    Piano_Dir = r"input here"  # change to your piano directory
-    Non_Piano_Dir = r"input here"  # change to your non-piano directory
+    Piano_Dir = r"input here"  # change to your instrument directory
+    Non_Piano_Dir = r"input here"  # change to your non-instrument directory
+    NumberOfSongs = None  # change to the number of songs you have (should be the same for instrument and song)
 
     make_folders(INPUT_DIR)
     PutInputFilesToFoldersAndRename(INPUT_DIR, Piano_Dir, Non_Piano_Dir)
